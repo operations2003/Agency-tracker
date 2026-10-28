@@ -152,6 +152,7 @@ export class BackgroundWorker {
                 where: { deduplicationKey: amber.deduplicationKey },
                 update: { actualValue: amber.actualValue, updatedAt: new Date() },
                 create: {
+                  organizationId: r.client.organizationId,
                   type: amber.type,
                   severity: amber.severity,
                   clientId: amber.clientId || null,
