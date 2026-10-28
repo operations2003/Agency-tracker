@@ -108,3 +108,50 @@ Centralized alert registry with deduplication keys.
 - `resolved_by_id` (UUID, nullable)
 - `resolution_notes` (TEXT, nullable)
 
+#### `invoices`
+Billing invoices issued to clients.
+- `id` (UUID, Primary Key)
+- `client_id` (UUID, Foreign Key -> `clients.id`)
+- `invoice_number` (VARCHAR, Unique)
+- `period_start` (TIMESTAMPTZ)
+- `period_end` (TIMESTAMPTZ)
+- `amount` (DECIMAL(12, 2))
+- `currency` (VARCHAR, default `USD`)
+- `status` (VARCHAR: `DRAFT`, `ISSUED`, `PAID`, `VOID`)
+
+#### `billable_hires`
+Confirmed placements triggering placement fees for contingency clients.
+- `id` (UUID, Primary Key)
+- `client_id` (UUID, Foreign Key -> `clients.id`)
+- `role_id` (UUID, Foreign Key -> `recruitment_roles.id`)
+- `candidate_name` (VARCHAR)
+- `hire_date` (TIMESTAMPTZ)
+- `fee_amount` (DECIMAL(12, 2))
+- `currency` (VARCHAR, default `USD`)
+- **Constraint**: `UNIQUE(client_id, role_id, candidate_name)` to prevent duplicate placement fees.
+
+#### `background_jobs`
+Durable database-backed job queue table powering asynchronous operations.
+- `id` (UUID, Primary Key)
+- `job_type` (VARCHAR: `SLA_RECALCULATION`, `ALERT_PROCESSING`, `NOTIFICATION_RETRY`, `WEEKLY_SUMMARY`, `CSV_IMPORT`, `CLEANUP`)
+- `payload` (TEXT / JSON, nullable)
+- `status` (VARCHAR: `PENDING`, `PROCESSING`, `COMPLETED`, `FAILED`)
+- `attempts` (INTEGER, default 0)
+- `max_attempts` (INTEGER, default 3)
+- `run_at` (TIMESTAMPTZ, default now)
+- `locked_at` (TIMESTAMPTZ, nullable)
+- `locked_by` (VARCHAR, nullable)
+- `last_error` (TEXT, nullable)
+- `created_at`, `updated_at` (TIMESTAMPTZ)
+- **Index**: `@@index([status, run_at])` for O(1) poll-and-lock queries.
+
+---
+
+### 3. Production Migration and Rollback Strategy
+1. **Forward Migration**: Handled via `server/prisma/migrations/0_init/migration.sql`. Apply with `npx prisma migrate deploy`.
+2. **Backward Compatibility**: New schema columns must be nullable or possess safe default values.
+3. **Rollback Plan**:
+   - In the event of a deployment halt, execute the reverse drop table / column sequence documented in the migration archive.
+   - Point-in-time recovery via WAL logs and daily snapshot restoration is documented in `docs/CLIENT_HANDOVER_CHECKLIST.md`.
+
+

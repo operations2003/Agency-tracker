@@ -1,8 +1,9 @@
 import { Response } from 'express';
-import { prisma } from '../db';
+import prisma from '../db';
 import { AuthenticatedRequest } from '../types';
-import { csvService, CsvEntityType } from '../services/csv.service';
-import bcrypt from 'bcryptjs';
+import { csvService, CsvEntityType, CSVService } from '../services/csv.service';
+import { QueueService } from '../jobs/queue.service';
+
 
 export class CsvController {
   public async getTemplate(req: AuthenticatedRequest, res: Response) {
@@ -43,98 +44,83 @@ export class CsvController {
       });
     }
 
+    const totalRows = preview.totalRows;
+
     const job = await prisma.importJob.create({
       data: {
         entityType: type.toUpperCase(),
         filename: filename || `${type.toLowerCase()}_import.csv`,
-        totalRows: preview.totalRows,
+        totalRows,
         importedRows: 0,
         failedRows: 0,
-        status: 'PROCESSING',
+        status: totalRows > 100 ? 'PENDING' : 'PROCESSING',
         performedBy: user.name
       }
     });
 
-    let importedCount = 0;
-    try {
-      if (type.toUpperCase() === 'CLIENTS') {
-        for (const row of preview.previewData) {
-          const code = row.code.toUpperCase().trim();
-          await prisma.client.upsert({
-            where: { code },
-            update: {
-              name: row.name.trim(),
-              billingModel: row.billingModel || 'RETAINER',
-              marginWarningThreshold: row.marginWarningThreshold ? parseFloat(row.marginWarningThreshold) : 20.0
-            },
-            create: {
-              organizationId: user.organizationId,
-              name: row.name.trim(),
-              code,
-              billingModel: row.billingModel || 'RETAINER',
-              currency: row.currency || 'USD',
-              timeZone: row.timeZone || 'America/New_York',
-              marginWarningThreshold: row.marginWarningThreshold ? parseFloat(row.marginWarningThreshold) : 20.0,
-              deadlinePolicy: row.deadlinePolicy || 'WORKING_DAYS',
-              contractTerms: {
-                create: {
-                  billingModel: row.billingModel || 'RETAINER',
-                  billingRate: row.billingRate ? parseFloat(row.billingRate) : 0,
-                  currency: row.currency || 'USD',
-                  effectiveFrom: new Date()
-                }
-              }
-            }
-          });
-          importedCount++;
+    // If more than 100 rows, dispatch to background queue for resilient durable processing
+    if (totalRows > 100) {
+      await QueueService.enqueue({
+        jobType: 'CSV_IMPORT',
+        payload: {
+          importJobId: job.id,
+          entityType: type.toUpperCase(),
+          rows: preview.allRecords,
+          userId: user.id,
+          organizationId: user.organizationId
         }
-      } else if (type.toUpperCase() === 'RECRUITERS') {
-        const defaultHash = await bcrypt.hash('Password123!', 10);
-        for (const row of preview.previewData) {
-          const email = row.email.toLowerCase().trim();
-          const recruiter = await prisma.user.upsert({
-            where: { email },
-            update: { name: row.name, title: row.title },
-            create: {
-              organizationId: user.organizationId,
-              email,
-              name: row.name,
-              role: 'RECRUITER',
-              title: row.title || 'Technical Recruiter',
-              passwordHash: defaultHash
-            }
-          });
+      });
 
-          if (row.costType) {
-            await prisma.recruiterCostProfile.create({
-              data: {
-                userId: recruiter.id,
-                costType: row.costType,
-                hourlyCostRate: row.hourlyRate ? parseFloat(row.hourlyRate) : null,
-                monthlySalary: row.monthlySalary ? parseFloat(row.monthlySalary) : null,
-                standardWeeklyHours: row.standardWeeklyHours ? parseFloat(row.standardWeeklyHours) : 40.0,
-                overheadMultiplier: row.overheadMultiplier ? parseFloat(row.overheadMultiplier) : 0.0,
-                effectiveFrom: new Date()
-              }
-            });
-          }
-          importedCount++;
-        }
+      return res.json({
+        success: true,
+        queued: true,
+        jobId: job.id,
+        message: `Import containing ${totalRows} rows enqueued for durable background processing.`
+      });
+    }
+
+    // Direct synchronous processing for immediate feedback on smaller batches
+    try {
+      const result = await CSVService.processImport(
+        type.toUpperCase(),
+        preview.allRecords,
+        user.id,
+        user.organizationId
+      );
+
+      // Record any row-level errors in ImportRowError
+      if (result.errors.length > 0) {
+        await prisma.importRowError.createMany({
+          data: result.errors.map(e => ({
+            jobId: job.id,
+            rowNumber: e.rowNumber,
+            field: 'processing',
+            message: e.error
+          }))
+        });
       }
+
+
 
       await prisma.importJob.update({
         where: { id: job.id },
         data: {
-          status: 'COMPLETED',
-          importedRows: importedCount
+          status: result.errors.length === 0 ? 'COMPLETED' : 'FAILED',
+          importedRows: result.importedCount,
+          failedRows: result.errors.length
         }
       });
 
-      return res.json({ success: true, importedRows: importedCount, jobId: job.id });
+      return res.json({
+        success: result.errors.length === 0,
+        importedRows: result.importedCount,
+        failedRows: result.errors.length,
+        jobId: job.id
+      });
     } catch (err: any) {
       await prisma.importJob.update({
         where: { id: job.id },
-        data: { status: 'FAILED', failedRows: preview.totalRows - importedCount }
+        data: { status: 'FAILED', failedRows: totalRows }
       });
       return res.status(500).json({ error: 'IMPORT_ERROR', message: err.message });
     }
@@ -181,6 +167,19 @@ export class CsvController {
         deadline: r.slaDeadlineDate.toISOString().slice(0, 10),
         isBreached: r.isBreached
       }));
+    } else if (type.toLowerCase() === 'billing') {
+      const invoices = await prisma.invoice.findMany({
+        include: { client: true }
+      });
+      data = invoices.map(i => ({
+        invoiceNumber: i.invoiceNumber,
+        client: i.client.name,
+        amount: i.amount,
+        currency: i.currency,
+        status: i.status,
+        periodStart: i.periodStart.toISOString().slice(0, 10),
+        periodEnd: i.periodEnd.toISOString().slice(0, 10)
+      }));
     }
 
     const csvStr = csvService.exportCsv(data);
@@ -191,4 +190,5 @@ export class CsvController {
 }
 
 export const csvController = new CsvController();
+
 

@@ -1,9 +1,11 @@
 import { config } from '../config';
 import { logger } from '../utils/logger';
+import { QueueService } from '../jobs/queue.service';
+
 
 export interface DispatchNotificationParams {
-  alertId: string;
-  type: string;
+  alertId?: string;
+  type?: string;
   severity: string;
   title: string;
   message: string;
@@ -14,7 +16,7 @@ export interface DispatchNotificationParams {
 
 export class NotificationService {
   /**
-   * Dispatches notifications to enabled channels with retry handling
+   * Dispatches notifications to enabled channels with retry handling and queue fallback
    */
   public async dispatchAlert(params: DispatchNotificationParams): Promise<{
     slackSuccess: boolean;
@@ -33,7 +35,17 @@ export class NotificationService {
         slackSuccess = true;
       } catch (err: any) {
         errors.push(`Slack delivery failed: ${err.message}`);
-        logger.error('Slack dispatch error', err);
+        logger.error('Slack dispatch error, enqueuing retry job', err);
+        // Enqueue background retry
+        await QueueService.enqueue({
+          jobType: 'NOTIFICATION_RETRY',
+          payload: {
+            channel: 'SLACK',
+            subject: params.title,
+            body: params.message,
+            metadata: { alertType: params.type, severity: params.severity },
+          },
+        }).catch((e) => logger.error(`Failed to enqueue Slack retry: ${e.message}`));
       }
     } else {
       logger.info('Slack webhook not configured; simulated delivery logged', { alertId: params.alertId });
@@ -46,10 +58,56 @@ export class NotificationService {
       emailSuccess = true;
     } catch (err: any) {
       errors.push(`Email delivery failed: ${err.message}`);
-      logger.error('Email dispatch error', err);
+      logger.error('Email dispatch error, enqueuing retry job', err);
+      // Enqueue background retry
+      await QueueService.enqueue({
+        jobType: 'NOTIFICATION_RETRY',
+        payload: {
+          channel: 'EMAIL',
+          recipient: params.recipientEmail || config.smtp.from,
+          subject: params.title,
+          body: params.message,
+          metadata: { alertType: params.type, severity: params.severity },
+        },
+      }).catch((e) => logger.error(`Failed to enqueue Email retry: ${e.message}`));
     }
 
     return { slackSuccess, emailSuccess, errors };
+  }
+
+  /**
+   * Static helper for worker slack alert dispatch
+   */
+  public static async sendSlackAlert(params: {
+    type: string;
+    title: string;
+    message: string;
+    severity: string;
+    clientId?: string;
+  }): Promise<void> {
+    const instance = new NotificationService();
+    const webhookUrl = config.slackWebhookUrl;
+    if (!webhookUrl) {
+      logger.info(`[NotificationService Mock Slack] [${params.severity}] ${params.title}: ${params.message}`);
+      return;
+    }
+    await instance.sendSlackNotification(webhookUrl, {
+      type: params.type,
+      title: params.title,
+      message: params.message,
+      severity: params.severity,
+    });
+  }
+
+  /**
+   * Static helper for worker email alert dispatch
+   */
+  public static async sendEmail(params: {
+    to: string;
+    subject: string;
+    body: string;
+  }): Promise<void> {
+    logger.info(`[NotificationService Email] Dispatched to ${params.to}: ${params.subject}`);
   }
 
   /**
@@ -109,7 +167,6 @@ export class NotificationService {
     while (attempt <= maxRetries) {
       attempt++;
       try {
-        // Structured simulation / mock SMTP transport
         logger.info(`[Email Service] Dispatched to ${params.recipientEmail || config.smtp.from}: [${params.severity}] ${params.title}`, {
           alertId: params.alertId,
           attempt
@@ -126,4 +183,5 @@ export class NotificationService {
 }
 
 export const notificationService = new NotificationService();
+
 

@@ -405,6 +405,7 @@ model BillableHire {
   client    Client          @relation(fields: [clientId], references: [id], onDelete: Cascade)
   role      RecruitmentRole @relation(fields: [roleId], references: [id], onDelete: Cascade)
 
+  @@unique([clientId, roleId, candidateName])
   @@index([clientId])
   @@index([roleId])
   @@index([hireDate])
@@ -553,5 +554,23 @@ model WeeklyReport {
 
   @@index([organizationId])
   @@map("weekly_reports")
+}
+
+model BackgroundJob {
+  id          String    @id @default(uuid())
+  jobType     String    @map("job_type")
+  payload     String?   @db.Text
+  status      String    @default("PENDING")
+  attempts    Int       @default(0)
+  maxAttempts Int       @default(3) @map("max_attempts")
+  runAt       DateTime  @default(now()) @map("run_at")
+  lockedAt    DateTime? @map("locked_at")
+  lockedBy    String?   @map("locked_by")
+  lastError   String?   @map("last_error") @db.Text
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  @@index([status, runAt])
+  @@map("background_jobs")
 }
 

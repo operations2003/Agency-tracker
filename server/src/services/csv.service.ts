@@ -1,5 +1,9 @@
 import { stringify } from 'csv-stringify/sync';
 import { parse } from 'csv-parse/sync';
+import prisma from '../db';
+import bcrypt from 'bcryptjs';
+import { logger } from '../utils/logger';
+
 
 export type CsvEntityType = 'CLIENTS' | 'RECRUITERS' | 'ROLES' | 'TIME_ENTRIES' | 'BILLING';
 
@@ -14,7 +18,11 @@ export interface CsvPreviewResult {
     rawData?: string;
   }>;
   previewData: any[];
+  allRecords: any[];
 }
+
+export const CSV_MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024; // 5 MB
+export const CSV_MAX_ROW_COUNT = 5000;
 
 export class CsvService {
   /**
@@ -66,6 +74,17 @@ export class CsvService {
    * Parses and validates raw CSV content without committing to the database
    */
   public previewCsv(entityType: CsvEntityType, csvContent: string): CsvPreviewResult {
+    if (Buffer.byteLength(csvContent, 'utf8') > CSV_MAX_FILE_SIZE_BYTES) {
+      return {
+        totalRows: 0,
+        validRows: 0,
+        invalidRows: 0,
+        errors: [{ rowNumber: 0, field: 'file_size', message: `File exceeds maximum allowed size of 5MB` }],
+        previewData: [],
+        allRecords: []
+      };
+    }
+
     let records: any[] = [];
     try {
       records = parse(csvContent, {
@@ -79,12 +98,25 @@ export class CsvService {
         validRows: 0,
         invalidRows: 0,
         errors: [{ rowNumber: 1, field: 'csv_format', message: `CSV syntax error: ${err.message}` }],
-        previewData: []
+        previewData: [],
+        allRecords: []
+      };
+    }
+
+    if (records.length > CSV_MAX_ROW_COUNT) {
+      return {
+        totalRows: records.length,
+        validRows: 0,
+        invalidRows: records.length,
+        errors: [{ rowNumber: 0, field: 'row_limit', message: `File exceeds maximum allowed row count of ${CSV_MAX_ROW_COUNT} rows` }],
+        previewData: [],
+        allRecords: []
       };
     }
 
     const errors: CsvPreviewResult['errors'] = [];
     const validData: any[] = [];
+    const seenKeys = new Set<string>();
 
     records.forEach((row, idx) => {
       const rowNum = idx + 2; // account for header
@@ -137,7 +169,16 @@ export class CsvService {
 
         case 'BILLING':
           if (!row.clientCode) rowErrors.push('Missing clientCode');
-          if (!row.invoiceNumber) rowErrors.push('Missing invoiceNumber');
+          if (!row.invoiceNumber) {
+            rowErrors.push('Missing invoiceNumber');
+          } else {
+            const key = row.invoiceNumber.trim().toUpperCase();
+            if (seenKeys.has(key)) {
+              rowErrors.push(`Duplicate invoiceNumber in batch: ${key}`);
+            } else {
+              seenKeys.add(key);
+            }
+          }
           if (!row.amount || isNaN(parseFloat(row.amount)) || parseFloat(row.amount) < 0) {
             rowErrors.push('Amount must be a non-negative number');
           }
@@ -163,7 +204,8 @@ export class CsvService {
       validRows: validData.length,
       invalidRows: records.length - validData.length,
       errors,
-      previewData: records.slice(0, 10)
+      previewData: records.slice(0, 10),
+      allRecords: validData
     };
   }
 
@@ -176,7 +218,122 @@ export class CsvService {
     }
     return stringify(records, { header: true });
   }
+
+  /**
+   * Static processor for both background jobs and immediate imports
+   */
+  public static async processImport(entityType: string, rows: any[], userId: string, organizationId?: string): Promise<{ importedCount: number; errors: any[] }> {
+    let importedCount = 0;
+    const errors: any[] = [];
+    const type = entityType.toUpperCase();
+
+    // Default password for newly imported recruiters
+    const defaultHash = await bcrypt.hash('Password123!', 10);
+
+    for (const [idx, row] of rows.entries()) {
+      try {
+        if (type === 'CLIENTS') {
+          const code = row.code.toUpperCase().trim();
+          await prisma.client.upsert({
+            where: { code },
+            update: {
+              name: row.name.trim(),
+              billingModel: row.billingModel || 'RETAINER',
+              marginWarningThreshold: row.marginWarningThreshold ? parseFloat(row.marginWarningThreshold) : 20.0,
+            },
+            create: {
+              organizationId: organizationId || 'org-agency-default',
+              name: row.name.trim(),
+              code,
+              billingModel: row.billingModel || 'RETAINER',
+              currency: row.currency || 'USD',
+              timeZone: row.timeZone || 'America/New_York',
+              marginWarningThreshold: row.marginWarningThreshold ? parseFloat(row.marginWarningThreshold) : 20.0,
+              deadlinePolicy: row.deadlinePolicy || 'WORKING_DAYS',
+              contractTerms: {
+                create: {
+                  billingModel: row.billingModel || 'RETAINER',
+                  billingRate: row.billingRate ? parseFloat(row.billingRate) : 0,
+                  currency: row.currency || 'USD',
+                  effectiveFrom: new Date(),
+                },
+              },
+            },
+          });
+          importedCount++;
+        } else if (type === 'RECRUITERS') {
+          const email = row.email.toLowerCase().trim();
+          const recruiter = await prisma.user.upsert({
+            where: { email },
+            update: { name: row.name, title: row.title },
+            create: {
+              organizationId: organizationId || 'org-agency-default',
+              email,
+              name: row.name,
+              role: 'RECRUITER',
+              title: row.title || 'Technical Recruiter',
+              passwordHash: defaultHash,
+            },
+          });
+
+          if (row.costType) {
+            await prisma.recruiterCostProfile.create({
+              data: {
+                userId: recruiter.id,
+                costType: row.costType,
+                hourlyCostRate: row.hourlyRate ? parseFloat(row.hourlyRate) : null,
+                monthlySalary: row.monthlySalary ? parseFloat(row.monthlySalary) : null,
+                standardWeeklyHours: row.standardWeeklyHours ? parseFloat(row.standardWeeklyHours) : 40.0,
+                overheadMultiplier: row.overheadMultiplier ? parseFloat(row.overheadMultiplier) : 0.0,
+                effectiveFrom: new Date(),
+              },
+            });
+          }
+          importedCount++;
+        } else if (type === 'ROLES') {
+          const client = await prisma.client.findUnique({ where: { code: row.clientCode.toUpperCase().trim() } });
+          if (!client) throw new Error(`Client code ${row.clientCode} not found`);
+
+          await prisma.recruitmentRole.create({
+            data: {
+              clientId: client.id,
+              title: row.title.trim(),
+              priority: row.priority || 'MEDIUM',
+              deadlinePolicy: row.deadlinePolicy || client.deadlinePolicy,
+              description: row.description || '',
+              slaDeadlineDate: new Date(Date.now() + (parseInt(row.targetDays, 10) || 14) * 24 * 60 * 60 * 1000),
+            },
+          });
+
+          importedCount++;
+        } else if (type === 'BILLING') {
+          const client = await prisma.client.findUnique({ where: { code: row.clientCode.toUpperCase().trim() } });
+          if (!client) throw new Error(`Client code ${row.clientCode} not found`);
+
+          await prisma.invoice.create({
+            data: {
+              clientId: client.id,
+              invoiceNumber: row.invoiceNumber.trim().toUpperCase(),
+              periodStart: row.periodStart ? new Date(row.periodStart) : new Date(),
+              periodEnd: row.periodEnd ? new Date(row.periodEnd) : new Date(),
+              amount: parseFloat(row.amount),
+              currency: row.currency || client.currency,
+              status: row.status || 'ISSUED',
+            },
+          });
+          importedCount++;
+        }
+      } catch (err: any) {
+        errors.push({ rowNumber: idx + 2, error: err.message });
+        logger.error(`CSV import row error (row ${idx + 2}): ${err.message}`);
+      }
+    }
+
+    return { importedCount, errors };
+  }
 }
 
 export const csvService = new CsvService();
+export const CSVService = CsvService;
+
 
