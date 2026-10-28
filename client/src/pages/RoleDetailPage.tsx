@@ -411,3 +411,4 @@ export const RoleDetailPage: React.FC<{
     </div>
   );
 };
+

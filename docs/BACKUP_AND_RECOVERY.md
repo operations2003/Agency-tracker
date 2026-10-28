@@ -41,3 +41,4 @@ sqlite3 dev.db ".backup 'dev_backup.db'"
    Update `DATABASE_URL` in backend secret configuration and deploy.
 5. **Post-Recovery Health Verification**:
    Query `GET /health` and `GET /ready` to confirm full database connectivity.
+

@@ -244,3 +244,4 @@ export const WorkloadBoardPage: React.FC = () => {
     </div>
   );
 };
+

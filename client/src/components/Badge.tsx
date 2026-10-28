@@ -96,3 +96,4 @@ export const MarginBadge: React.FC<{ status: string; marginPct: number | null }>
 
   return <Badge variant={variant} dot>{label}</Badge>;
 };
+

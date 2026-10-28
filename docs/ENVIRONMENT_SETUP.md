@@ -82,3 +82,4 @@ cd client && npm run dev
 ```
 
 Visit the dashboard in your browser: `http://localhost:5173`.
+

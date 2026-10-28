@@ -24,3 +24,4 @@ export const config = {
     defaultMaxWeeklyHours: parseFloat(process.env.DEFAULT_MAX_WEEKLY_HOURS || '45.0')
   }
 };
+

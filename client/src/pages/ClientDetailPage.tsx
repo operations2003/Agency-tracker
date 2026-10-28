@@ -388,3 +388,4 @@ export const ClientDetailPage: React.FC<{
     </div>
   );
 };
+

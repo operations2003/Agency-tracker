@@ -80,3 +80,4 @@ Revenue is calculated deterministically per client for each reporting period:
 - **Utilization Percentage**:
   $$\text{Utilization (\%)} = \left(\frac{\text{Total Recorded Hours This Week}}{\text{Weekly Capacity Hours}}\right) \times 100$$
 - If Capacity $= 0$, Utilization is safely treated as $0.0\%$.
+

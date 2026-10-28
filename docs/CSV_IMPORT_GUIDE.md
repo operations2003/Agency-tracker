@@ -55,3 +55,4 @@ Headers: `recruiterEmail,clientCode,roleTitle,taskType,workDate,hours,isBillable
 - The importer validates row data before database insertion.
 - If any line fails validation, detailed line numbers and specific error reasons are surfaced without corrupting existing records.
 - All operations are idempotent; existing client codes and user emails are safely updated rather than duplicated.
+

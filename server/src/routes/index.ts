@@ -101,3 +101,4 @@ router.put('/settings', requireRole('OWNER'), (req, res, next) => settingsContro
 router.get('/audit-logs', requireRole('OWNER', 'FINANCE'), (req, res, next) => auditController.getAuditLogs(req, res).catch(next));
 
 export default router;
+

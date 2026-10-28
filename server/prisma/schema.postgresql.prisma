@@ -554,3 +554,4 @@ model WeeklyReport {
   @@index([organizationId])
   @@map("weekly_reports")
 }
+

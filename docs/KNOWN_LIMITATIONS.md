@@ -18,3 +18,4 @@
 
 ### 4. Background Job Scheduling
 - Scheduled SLA clock evaluations and weekly digests can be triggered automatically via the scheduler or on-demand via the **Run Scheduled Risk Scan** button in the Alert Center.
+

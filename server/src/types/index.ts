@@ -108,3 +108,4 @@ export interface RecruiterWorkloadResult {
   clientDistribution: Array<{ clientId: string; clientName: string; roleCount: number }>;
   upcomingDeadlines: Array<{ roleId: string; title: string; clientName: string; deadline: string; slaStatus: string }>;
 }
+

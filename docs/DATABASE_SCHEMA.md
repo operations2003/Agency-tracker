@@ -107,3 +107,4 @@ Centralized alert registry with deduplication keys.
 - `resolved_at` (TIMESTAMPTZ, nullable)
 - `resolved_by_id` (UUID, nullable)
 - `resolution_notes` (TEXT, nullable)
+

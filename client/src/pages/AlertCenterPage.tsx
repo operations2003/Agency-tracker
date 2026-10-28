@@ -320,3 +320,4 @@ export const AlertCenterPage: React.FC = () => {
     </div>
   );
 };
+

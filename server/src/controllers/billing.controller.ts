@@ -148,3 +148,4 @@ export class BillingController {
 }
 
 export const billingController = new BillingController();
+

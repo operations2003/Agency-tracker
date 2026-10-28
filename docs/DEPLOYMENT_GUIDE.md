@@ -77,3 +77,4 @@ COPY --from=builder /app/client/dist /app/client/dist
 EXPOSE 5000
 CMD ["node", "server/dist/index.js"]
 ```
+

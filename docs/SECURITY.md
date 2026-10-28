@@ -40,3 +40,4 @@
 - Parameterized SQL execution via Prisma ORM prevents SQL injection.
 - CSV imports run full schema dry-run checks prior to batch transaction execution.
 - Upload file sizes and row counts are limited to prevent memory exhaustion / DoS.
+

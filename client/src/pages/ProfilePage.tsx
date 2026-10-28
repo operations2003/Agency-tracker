@@ -77,3 +77,4 @@ export const ProfilePage: React.FC = () => {
     </div>
   );
 };
+

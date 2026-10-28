@@ -96,3 +96,4 @@ describe('Recruiter Workload Engine', () => {
     expect(result.utilizationPercentage).toBe(0);
   });
 });
+

@@ -43,3 +43,4 @@
    - Red: ≥ 90% elapsed.
    - Red (Breached): Contractual deadline exceeded.
 3. Advance stages or click **Extend SLA Deadline** if the client approved an extension.
+

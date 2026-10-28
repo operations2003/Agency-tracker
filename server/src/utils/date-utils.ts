@@ -99,3 +99,4 @@ export function addWorkingDays(startDate: Date, daysToAdd: number, holidays: str
 
   return date;
 }
+

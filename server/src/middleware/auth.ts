@@ -29,3 +29,4 @@ export function authenticateToken(req: AuthenticatedRequest, res: Response, next
     });
   }
 }
+

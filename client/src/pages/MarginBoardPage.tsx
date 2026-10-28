@@ -273,3 +273,4 @@ export const MarginBoardPage: React.FC = () => {
     </div>
   );
 };
+

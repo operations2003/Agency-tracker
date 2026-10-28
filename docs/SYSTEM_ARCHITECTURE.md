@@ -56,3 +56,4 @@ The application is structured as a decoupled, multi-tier web application designe
 - **Supported Targets**:
   - PostgreSQL (Production / Staging via `schema.postgresql.prisma`).
   - SQLite (Embedded Zero-Config Local Testing via `schema.prisma`).
+

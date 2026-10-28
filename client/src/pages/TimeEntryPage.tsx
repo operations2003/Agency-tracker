@@ -334,3 +334,4 @@ export const TimeEntryPage: React.FC<{ isOpenModalImmediately?: boolean }> = ({ 
     </div>
   );
 };
+

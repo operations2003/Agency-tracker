@@ -216,3 +216,4 @@ ${summary.dataQualityWarning.message || 'All time entries for the period are off
 }
 
 export const weeklyReportService = new WeeklyReportService();
+

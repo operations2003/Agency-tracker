@@ -289,3 +289,4 @@ export const DashboardPage: React.FC<{ onNavigate: (tab: string) => void }> = ({
     </div>
   );
 };
+
