@@ -1,11 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { useToast } from '../context/ToastContext';
 import { api } from '../api/client';
 import { TimeEntry } from '../types';
 import { Modal } from '../components/Modal';
+import { TableSkeleton } from '../components/LoadingSkeleton';
+import { EmptyState } from '../components/EmptyState';
 import { CheckSquare, XCircle, CheckCircle2, AlertCircle, RefreshCw, SlidersHorizontal } from 'lucide-react';
 
 export const TimeApprovalPage: React.FC = () => {
+  const { success, error } = useToast();
   const [entries, setEntries] = useState<TimeEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -24,8 +28,8 @@ export const TimeApprovalPage: React.FC = () => {
     try {
       const data = await api.getTimeEntries();
       setEntries(data);
-    } catch (err) {
-      console.error(err);
+    } catch (err: any) {
+      error('Failed to Load Entries', err.message || 'Could not fetch time queue.');
     } finally {
       setLoading(false);
     }
@@ -59,10 +63,11 @@ export const TimeApprovalPage: React.FC = () => {
     setSubmitting(true);
     try {
       await api.batchApproveTime(selectedIds, 'APPROVE');
+      success('Hours Approved', `${selectedIds.length} time entries approved into official margin calculations.`);
       setSelectedIds([]);
       fetchSubmittedEntries();
     } catch (err: any) {
-      alert(err.message || 'Batch approval failed');
+      error('Batch Approval Failed', err.message || 'Batch approval failed');
     } finally {
       setSubmitting(false);
     }
@@ -75,11 +80,12 @@ export const TimeApprovalPage: React.FC = () => {
     try {
       await api.batchApproveTime(selectedIds, 'REJECT', rejectionReason);
       setIsRejectModalOpen(false);
+      success('Entries Rejected', `${selectedIds.length} entries rejected and sent back to recruiters.`);
       setSelectedIds([]);
       setRejectionReason('');
       fetchSubmittedEntries();
     } catch (err: any) {
-      alert(err.message || 'Batch rejection failed');
+      error('Batch Rejection Failed', err.message || 'Batch rejection failed');
     } finally {
       setSubmitting(false);
     }
@@ -94,9 +100,10 @@ export const TimeApprovalPage: React.FC = () => {
       setIsAdjustModalOpen(false);
       setAdjustingEntry(null);
       setAdjustmentReason('');
+      success('Audited Adjustment Recorded', `Record adjusted to ${adjustedHours}h.`);
       fetchSubmittedEntries();
     } catch (err: any) {
-      alert(err.message || 'Adjustment failed');
+      error('Adjustment Failed', err.message || 'Adjustment failed');
     } finally {
       setSubmitting(false);
     }

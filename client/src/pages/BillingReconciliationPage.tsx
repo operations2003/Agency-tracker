@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../api/client';
+import { useToast } from '../context/ToastContext';
 import { Modal } from '../components/Modal';
 import { Receipt, Plus, DollarSign, ArrowRight, CheckCircle2, AlertCircle } from 'lucide-react';
 
 export const BillingReconciliationPage: React.FC = () => {
+  const { success, error } = useToast();
   const [invoices, setInvoices] = useState<any[]>([]);
   const [reconciliation, setReconciliation] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -47,8 +49,8 @@ export const BillingReconciliationPage: React.FC = () => {
       setClients(clientData);
       setRoles(roleData);
       if (clientData.length > 0) setClientId(clientData[0].id);
-    } catch (err) {
-      console.error(err);
+    } catch (err: any) {
+      error('Failed to Load Billing Data', err.message || 'Could not fetch invoices and reconciliation.');
     } finally {
       setLoading(false);
     }
@@ -71,9 +73,10 @@ export const BillingReconciliationPage: React.FC = () => {
       });
       setIsInvoiceModalOpen(false);
       setInvoiceNumber('');
+      success('Invoice Generated', `Invoice ${invoiceNumber} created for $${invoiceAmount}.`);
       fetchData();
     } catch (err: any) {
-      alert(err.message || 'Failed to create invoice');
+      error('Invoice Creation Failed', err.message || 'Failed to create invoice');
     } finally {
       setSubmitting(false);
     }
@@ -92,9 +95,10 @@ export const BillingReconciliationPage: React.FC = () => {
       });
       setIsHireModalOpen(false);
       setCandidateName('');
+      success('Contingency Fee Incurred', `Recorded placement fee of $${feeAmount} for ${candidateName}.`);
       fetchData();
     } catch (err: any) {
-      alert(err.message || 'Failed to record billable hire');
+      error('Placement Fee Failed', err.message || 'Failed to record billable hire');
     } finally {
       setSubmitting(false);
     }
@@ -110,9 +114,10 @@ export const BillingReconciliationPage: React.FC = () => {
         reason: adjReason
       });
       setIsAdjustmentModalOpen(false);
+      success('Financial Adjustment Recorded', `Applied ${adjAmount} adjustment (${adjReason}).`);
       fetchData();
     } catch (err: any) {
-      alert(err.message || 'Failed to record adjustment');
+      error('Adjustment Failed', err.message || 'Failed to record adjustment');
     } finally {
       setSubmitting(false);
     }

@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../api/client';
+import { useToast } from '../context/ToastContext';
 import { Modal } from '../components/Modal';
 import { UserCheck, Plus, ShieldCheck, Mail, Building2 } from 'lucide-react';
 
 export const UserManagementPage: React.FC = () => {
+  const { success, error } = useToast();
   const [users, setUsers] = useState<any[]>([]);
   const [clients, setClients] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -33,8 +35,8 @@ export const UserManagementPage: React.FC = () => {
       ]);
       setUsers(usersData);
       setClients(clientsData);
-    } catch (err) {
-      console.error(err);
+    } catch (err: any) {
+      error('Failed to Load Users', err.message || 'Could not fetch user directory.');
     } finally {
       setLoading(false);
     }
@@ -60,9 +62,10 @@ export const UserManagementPage: React.FC = () => {
       setIsAddUserModalOpen(false);
       setEmail('');
       setName('');
+      success('User Enrolled', `Created ${name} as ${role}. Credentials dispatched.`);
       fetchUsers();
     } catch (err: any) {
-      alert(err.message || 'Failed to create user');
+      error('Failed to Create User', err.message || 'Failed to create user');
     } finally {
       setSubmitting(false);
     }
@@ -75,9 +78,10 @@ export const UserManagementPage: React.FC = () => {
       await api.updateUserAssignments(selectedUser.id, assignedClientIds);
       setIsAssignModalOpen(false);
       setSelectedUser(null);
+      success('Assignments Saved', `Client access permissions updated for ${selectedUser.name}.`);
       fetchUsers();
     } catch (err: any) {
-      alert(err.message || 'Failed to update client assignments');
+      error('Assignment Failed', err.message || 'Failed to update client assignments');
     } finally {
       setSubmitting(false);
     }

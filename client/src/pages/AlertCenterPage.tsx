@@ -1,9 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { useToast } from '../context/ToastContext';
 import { api } from '../api/client';
 import { Alert } from '../types';
 import { Badge } from '../components/Badge';
 import { Modal } from '../components/Modal';
+import { CardSkeleton } from '../components/LoadingSkeleton';
+import { EmptyState } from '../components/EmptyState';
 import {
   AlertTriangle,
   ShieldAlert,
@@ -18,6 +21,7 @@ import {
 
 export const AlertCenterPage: React.FC = () => {
   const { isOwner, isManager } = useAuth();
+  const { success, error, info } = useToast();
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<'OPEN' | 'RESOLVED' | ''>('OPEN');
@@ -37,8 +41,8 @@ export const AlertCenterPage: React.FC = () => {
         type: typeFilter || undefined
       });
       setAlerts(data);
-    } catch (err) {
-      console.error(err);
+    } catch (err: any) {
+      error('Failed to Load Alerts', err.message || 'Could not fetch alerts stream.');
     } finally {
       setLoading(false);
     }
@@ -51,10 +55,11 @@ export const AlertCenterPage: React.FC = () => {
   const handleScanClocks = async () => {
     setScanning(true);
     try {
-      await api.scanSlaAlerts();
+      const res = await api.scanSlaAlerts();
+      success('Risk Scan Finished', `Analyzed active roles. ${res?.createdAlerts?.length || 0} alerts evaluated.`);
       fetchAlerts();
     } catch (err: any) {
-      alert(err.message || 'Scan failed');
+      error('Scan Failed', err.message || 'Risk engine scan failed.');
     } finally {
       setScanning(false);
     }
@@ -68,9 +73,10 @@ export const AlertCenterPage: React.FC = () => {
       await api.resolveAlert(selectedAlert.id, resolutionNotes);
       setSelectedAlert(null);
       setResolutionNotes('');
+      success('Risk Alert Resolved', `Alert closed and logged to audit trail.`);
       fetchAlerts();
     } catch (err: any) {
-      alert(err.message || 'Failed to resolve alert');
+      error('Resolution Failed', err.message || 'Failed to resolve alert');
     } finally {
       setSubmitting(false);
     }
@@ -79,19 +85,23 @@ export const AlertCenterPage: React.FC = () => {
   const handleReopenAlert = async (id: string) => {
     try {
       await api.reopenAlert(id);
+      info('Alert Reopened', 'Risk alert set back to ACTIVE status.');
       fetchAlerts();
     } catch (err: any) {
-      alert(err.message || 'Failed to reopen alert');
+      error('Failed to Reopen', err.message || 'Failed to reopen alert');
     }
   };
 
   const handleTestDispatch = async (alertId: string) => {
     try {
       const res = await api.testDispatchAlert(alertId, 'SLACK');
-      alert(`Test notification dispatched! Slack: ${res.dispatchResult.slackSuccess ? '✓ Delivered' : 'Failed'}`);
+      success(
+        'Webhook Dispatched',
+        `Slack notification: ${res.dispatchResult.slackSuccess ? '✓ Delivered' : 'Failed'}`
+      );
       fetchAlerts();
     } catch (err: any) {
-      alert(err.message || 'Dispatch failed');
+      error('Dispatch Failed', err.message || 'Notification webhook failed.');
     }
   };
 
@@ -176,13 +186,17 @@ export const AlertCenterPage: React.FC = () => {
       {/* Alerts Stream List */}
       <div className="space-y-3">
         {loading ? (
-          <div className="p-8 text-center text-sm text-slate-400">Loading risk alerts...</div>
-        ) : alerts.length === 0 ? (
-          <div className="p-12 text-center text-slate-400 bg-slate-900 border border-slate-800 rounded-2xl">
-            <CheckCircle2 className="w-10 h-10 text-emerald-400 mx-auto mb-2 opacity-80" />
-            <h4 className="text-sm font-semibold text-white">No alerts currently active</h4>
-            <p className="text-xs text-slate-500 mt-1">All SLA clocks and client profit margins are within safety thresholds.</p>
+          <div className="space-y-3">
+            <CardSkeleton />
+            <CardSkeleton />
+            <CardSkeleton />
           </div>
+        ) : alerts.length === 0 ? (
+          <EmptyState
+            title="No alerts currently active"
+            description="All candidate SLA clocks and client profit margins are safely within operational thresholds."
+            icon={<CheckCircle2 className="w-8 h-8 text-emerald-400 opacity-80" />}
+          />
         ) : (
           alerts.map(alert => (
             <div

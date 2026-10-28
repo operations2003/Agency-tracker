@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../api/client';
+import { useToast } from '../context/ToastContext';
+import { CardSkeleton, TableSkeleton } from '../components/LoadingSkeleton';
 import {
   FileText,
   Send,
@@ -11,6 +13,7 @@ import {
 } from 'lucide-react';
 
 export const ReportsPage: React.FC = () => {
+  const { success, error } = useToast();
   const [reportData, setReportData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [recipientEmails, setRecipientEmails] = useState('management@agency.io');
@@ -21,8 +24,8 @@ export const ReportsPage: React.FC = () => {
     try {
       const data = await api.getWeeklyReport();
       setReportData(data);
-    } catch (err) {
-      console.error(err);
+    } catch (err: any) {
+      error('Failed to Load Report', err.message || 'Could not compile weekly report.');
     } finally {
       setLoading(false);
     }
@@ -36,16 +39,26 @@ export const ReportsPage: React.FC = () => {
     setDispatching(true);
     try {
       await api.sendWeeklyReport(recipientEmails);
-      alert(`Weekly management summary dispatched to: ${recipientEmails}`);
+      success('Report Dispatched', `Executive weekly summary sent to: ${recipientEmails}`);
     } catch (err: any) {
-      alert(err.message || 'Dispatch failed');
+      error('Dispatch Failed', err.message || 'Dispatch failed');
     } finally {
       setDispatching(false);
     }
   };
 
   if (loading) {
-    return <div className="p-8 text-center text-sm text-slate-400">Compiling executive weekly summary report...</div>;
+    return (
+      <div className="space-y-6">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <CardSkeleton />
+          <CardSkeleton />
+          <CardSkeleton />
+          <CardSkeleton />
+        </div>
+        <TableSkeleton rows={4} cols={5} />
+      </div>
+    );
   }
 
   const summary = reportData?.summary;

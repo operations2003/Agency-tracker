@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../api/client';
+import { useToast } from '../context/ToastContext';
 import {
   FileSpreadsheet,
   Download,
@@ -11,6 +12,7 @@ import {
 } from 'lucide-react';
 
 export const CsvImportPage: React.FC = () => {
+  const { success, error, warning } = useToast();
   const [selectedEntity, setSelectedEntity] = useState<string>('CLIENTS');
   const [csvContent, setCsvContent] = useState('');
   const [previewResult, setPreviewResult] = useState<any>(null);
@@ -51,8 +53,16 @@ export const CsvImportPage: React.FC = () => {
       try {
         const preview = await api.previewCsv(selectedEntity, text);
         setPreviewResult(preview);
+        if (preview.errors && preview.errors.length > 0) {
+          warning(
+            'Validation Warnings Detected',
+            `Found ${preview.errors.length} format warning(s) in preview.`
+          );
+        } else {
+          success('CSV Validated', `All ${preview.totalRows} records passed schema dry-run.`);
+        }
       } catch (err: any) {
-        alert(err.message || 'CSV preview parsing failed');
+        error('Preview Parsing Failed', err.message || 'CSV preview parsing failed');
       } finally {
         setPreviewLoading(false);
       }
@@ -65,12 +75,15 @@ export const CsvImportPage: React.FC = () => {
     setImporting(true);
     try {
       const res = await api.executeCsvImport(selectedEntity, csvContent, `${selectedEntity.toLowerCase()}_import.csv`);
-      alert(`Import successful! ${res.importedRows} records ingested without data loss.`);
+      success(
+        'Import Successful',
+        `${res.importedRows} records ingested without data loss into system tables.`
+      );
       setCsvContent('');
       setPreviewResult(null);
       fetchHistory();
     } catch (err: any) {
-      alert(err.message || 'Import failed');
+      error('Import Failed', err.message || 'Import transaction aborted due to row error.');
     } finally {
       setImporting(false);
     }

@@ -1,17 +1,24 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { useToast } from '../context/ToastContext';
 import { api } from '../api/client';
 import { Client } from '../types';
 import { Modal } from '../components/Modal';
+import { TableSkeleton } from '../components/LoadingSkeleton';
+import { EmptyState } from '../components/EmptyState';
+import { Pagination } from '../components/Pagination';
 import { Building2, Search, Plus, ArrowRight, ShieldAlert, Calendar } from 'lucide-react';
 
 export const ClientListPage: React.FC<{ onSelectClient: (clientId: string) => void }> = ({ onSelectClient }) => {
   const { isOwner, isManager } = useAuth();
+  const { success, error } = useToast();
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [billingModelFilter, setBillingModelFilter] = useState('');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
 
   // Form State
   const [name, setName] = useState('');
@@ -34,8 +41,8 @@ export const ClientListPage: React.FC<{ onSelectClient: (clientId: string) => vo
         billingModel: billingModelFilter || undefined
       });
       setClients(data);
-    } catch (err) {
-      console.error(err);
+    } catch (err: any) {
+      error('Failed to Load Clients', err.message || 'Network error fetching client records.');
     } finally {
       setLoading(false);
     }
@@ -43,6 +50,7 @@ export const ClientListPage: React.FC<{ onSelectClient: (clientId: string) => vo
 
   useEffect(() => {
     fetchClients();
+    setCurrentPage(1);
   }, [search, billingModelFilter]);
 
   const handleCreateClient = async (e: React.FormEvent) => {
@@ -64,9 +72,10 @@ export const ClientListPage: React.FC<{ onSelectClient: (clientId: string) => vo
       setIsAddModalOpen(false);
       setName('');
       setCode('');
+      success('Client Onboarded', `${name} (${code}) configured with ${billingModel} contract.`);
       fetchClients();
     } catch (err: any) {
-      alert(err.message || 'Failed to create client');
+      error('Client Creation Failed', err.message || 'Could not create client record.');
     } finally {
       setSubmitting(false);
     }
@@ -120,12 +129,17 @@ export const ClientListPage: React.FC<{ onSelectClient: (clientId: string) => vo
       </div>
 
       {/* Clients Table */}
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-sm">
-        {loading ? (
-          <div className="p-8 text-center text-sm text-slate-400">Loading clients...</div>
-        ) : clients.length === 0 ? (
-          <div className="p-8 text-center text-sm text-slate-400">No client accounts found.</div>
-        ) : (
+      {loading ? (
+        <TableSkeleton rows={5} cols={7} />
+      ) : clients.length === 0 ? (
+        <EmptyState
+          title="No client accounts found"
+          description={search || billingModelFilter ? "No clients match your filter criteria. Try adjusting your query." : "No clients have been onboarded yet. Create your first client contract."}
+          actionLabel={(isOwner || isManager) ? "Add New Client" : undefined}
+          onAction={(isOwner || isManager) ? () => setIsAddModalOpen(true) : undefined}
+        />
+      ) : (
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-sm">
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
               <thead className="bg-slate-800/60 text-xs uppercase tracking-wider text-slate-400 border-b border-slate-800">
@@ -140,7 +154,7 @@ export const ClientListPage: React.FC<{ onSelectClient: (clientId: string) => vo
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/60">
-                {clients.map(client => (
+                {clients.slice((currentPage - 1) * pageSize, currentPage * pageSize).map(client => (
                   <tr
                     key={client.id}
                     onClick={() => onSelectClient(client.id)}
@@ -205,8 +219,15 @@ export const ClientListPage: React.FC<{ onSelectClient: (clientId: string) => vo
               </tbody>
             </table>
           </div>
-        )}
-      </div>
+          <Pagination
+            currentPage={currentPage}
+            totalItems={clients.length}
+            pageSize={pageSize}
+            onPageChange={setCurrentPage}
+            onPageSizeChange={setPageSize}
+          />
+        </div>
+      )}
 
       {/* Add Client Modal */}
       <Modal

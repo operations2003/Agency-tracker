@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../api/client';
+import { useToast } from '../context/ToastContext';
 import { Settings, Save, CheckCircle2, ShieldAlert } from 'lucide-react';
 
 export const BusinessRulesSettingsPage: React.FC = () => {
+  const { success: showToastSuccess, error: showToastError } = useToast();
   const [settings, setSettings] = useState<any>({
     DEFAULT_MARGIN_WARNING: '20.0',
     DEFAULT_SLA_AMBER: '70.0',
@@ -22,8 +24,8 @@ export const BusinessRulesSettingsPage: React.FC = () => {
       try {
         const data = await api.getSettings();
         setSettings(data);
-      } catch (err) {
-        console.error(err);
+      } catch (err: any) {
+        showToastError('Failed to Load Settings', err.message || 'Could not fetch business rules.');
       } finally {
         setLoading(false);
       }
@@ -38,9 +40,10 @@ export const BusinessRulesSettingsPage: React.FC = () => {
     try {
       await api.updateSettings(settings);
       setSuccess(true);
+      showToastSuccess('Settings Saved', 'Business rules and alert thresholds updated agency-wide.');
       setTimeout(() => setSuccess(false), 4000);
     } catch (err: any) {
-      alert(err.message || 'Failed to update settings');
+      showToastError('Settings Update Failed', err.message || 'Failed to update settings');
     } finally {
       setSaving(false);
     }

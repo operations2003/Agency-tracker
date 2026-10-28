@@ -1,9 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { useToast } from '../context/ToastContext';
 import { api } from '../api/client';
 import { RecruitmentRole, Client } from '../types';
 import { SlaBadge } from '../components/Badge';
 import { Modal } from '../components/Modal';
+import { TableSkeleton } from '../components/LoadingSkeleton';
+import { EmptyState } from '../components/EmptyState';
+import { Pagination } from '../components/Pagination';
 import {
   Briefcase,
   Search,
@@ -17,6 +21,7 @@ import {
 
 export const RoleListPage: React.FC<{ onSelectRole: (roleId: string) => void }> = ({ onSelectRole }) => {
   const { user, isRecruiter } = useAuth();
+  const { success, error } = useToast();
   const [roles, setRoles] = useState<RecruitmentRole[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [recruiters, setRecruiters] = useState<any[]>([]);
@@ -25,6 +30,8 @@ export const RoleListPage: React.FC<{ onSelectRole: (roleId: string) => void }> 
   const [stageFilter, setStageFilter] = useState('');
   const [priorityFilter, setPriorityFilter] = useState('');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
 
   // New Role Form
   const [clientId, setClientId] = useState('');
@@ -45,8 +52,8 @@ export const RoleListPage: React.FC<{ onSelectRole: (roleId: string) => void }> 
         priority: priorityFilter || undefined
       });
       setRoles(data);
-    } catch (err) {
-      console.error(err);
+    } catch (err: any) {
+      error('Failed to Load Roles', err.message || 'Could not fetch recruitment roles.');
     } finally {
       setLoading(false);
     }
@@ -54,6 +61,7 @@ export const RoleListPage: React.FC<{ onSelectRole: (roleId: string) => void }> 
 
   useEffect(() => {
     fetchRoles();
+    setCurrentPage(1);
     const loadMetadata = async () => {
       try {
         const [clientsData, usersData] = await Promise.all([
@@ -86,9 +94,10 @@ export const RoleListPage: React.FC<{ onSelectRole: (roleId: string) => void }> 
       setIsAddModalOpen(false);
       setTitle('');
       setDescription('');
+      success('Role Search Opened', `${title} created with ${targetDays}-day SLA tracking.`);
       fetchRoles();
     } catch (err: any) {
-      alert(err.message || 'Failed to create recruitment request');
+      error('Failed to Create Role', err.message || 'Failed to create recruitment request.');
     } finally {
       setSubmitting(false);
     }
@@ -157,12 +166,17 @@ export const RoleListPage: React.FC<{ onSelectRole: (roleId: string) => void }> 
       </div>
 
       {/* Roles List Table */}
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-sm">
-        {loading ? (
-          <div className="p-8 text-center text-sm text-slate-400">Loading roles and calculating SLA clocks...</div>
-        ) : roles.length === 0 ? (
-          <div className="p-8 text-center text-sm text-slate-400">No recruitment roles found matching criteria.</div>
-        ) : (
+      {loading ? (
+        <TableSkeleton rows={5} cols={7} />
+      ) : roles.length === 0 ? (
+        <EmptyState
+          title="No recruitment roles found"
+          description={search || stageFilter || priorityFilter ? "No open searches match your current criteria. Try resetting filters." : "No recruitment requirements are open. Create your first role search."}
+          actionLabel={!isRecruiter ? "Create New Search" : undefined}
+          onAction={!isRecruiter ? () => setIsAddModalOpen(true) : undefined}
+        />
+      ) : (
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-sm">
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
               <thead className="bg-slate-800/60 text-xs uppercase tracking-wider text-slate-400 border-b border-slate-800">
@@ -177,7 +191,7 @@ export const RoleListPage: React.FC<{ onSelectRole: (roleId: string) => void }> 
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/60">
-                {roles.map(role => (
+                {roles.slice((currentPage - 1) * pageSize, currentPage * pageSize).map(role => (
                   <tr
                     key={role.id}
                     onClick={() => onSelectRole(role.id)}
@@ -254,8 +268,15 @@ export const RoleListPage: React.FC<{ onSelectRole: (roleId: string) => void }> 
               </tbody>
             </table>
           </div>
-        )}
-      </div>
+          <Pagination
+            currentPage={currentPage}
+            totalItems={roles.length}
+            pageSize={pageSize}
+            onPageChange={setCurrentPage}
+            onPageSizeChange={setPageSize}
+          />
+        </div>
+      )}
 
       {/* New Recruitment Role Modal */}
       <Modal

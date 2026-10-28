@@ -3,6 +3,9 @@ import { api } from '../api/client';
 import { MarginResult } from '../types';
 import { MarginBadge, Badge } from '../components/Badge';
 import { Modal } from '../components/Modal';
+import { TableSkeleton } from '../components/LoadingSkeleton';
+import { EmptyState } from '../components/EmptyState';
+import { Pagination } from '../components/Pagination';
 import {
   TrendingDown,
   ArrowUpDown,
@@ -25,6 +28,8 @@ export const MarginBoardPage: React.FC = () => {
   const [sortBy, setSortBy] = useState<'margin' | 'revenue' | 'profit' | 'cost'>('margin');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [billingModelFilter, setBillingModelFilter] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
 
   // Reporting Period State
   const [period, setPeriod] = useState<string>('current_month');
@@ -247,12 +252,15 @@ export const MarginBoardPage: React.FC = () => {
       </div>
 
       {/* Margins Table */}
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-sm">
-        {loading ? (
-          <div className="p-8 text-center text-sm text-slate-400">Calculating real-time client margins...</div>
-        ) : filteredMargins.length === 0 ? (
-          <div className="p-8 text-center text-sm text-slate-400">No client records found matching criteria.</div>
-        ) : (
+      {loading ? (
+        <TableSkeleton rows={6} cols={8} />
+      ) : filteredMargins.length === 0 ? (
+        <EmptyState
+          title="No margin data found"
+          description={search || billingModelFilter ? "No clients match your search criteria. Try clearing filters." : "No client activity recorded in this reporting period."}
+        />
+      ) : (
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-sm">
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
               <thead className="bg-slate-800/60 text-xs uppercase tracking-wider text-slate-400 border-b border-slate-800">
@@ -268,7 +276,7 @@ export const MarginBoardPage: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/60">
-                {filteredMargins.map(item => (
+                {filteredMargins.slice((currentPage - 1) * pageSize, currentPage * pageSize).map(item => (
                   <tr
                     key={item.clientId}
                     onClick={() => handleOpenDrilldown(item.clientId)}
@@ -337,8 +345,15 @@ export const MarginBoardPage: React.FC = () => {
               </tbody>
             </table>
           </div>
-        )}
-      </div>
+          <Pagination
+            currentPage={currentPage}
+            totalItems={filteredMargins.length}
+            pageSize={pageSize}
+            onPageChange={setCurrentPage}
+            onPageSizeChange={setPageSize}
+          />
+        </div>
+      )}
 
       {/* Drilldown Modal */}
       <Modal

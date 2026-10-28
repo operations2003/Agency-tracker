@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { useToast } from '../context/ToastContext';
 import { api } from '../api/client';
 import { SlaBadge, Badge } from '../components/Badge';
 import { Modal } from '../components/Modal';
+import { CardSkeleton, TableSkeleton } from '../components/LoadingSkeleton';
 import {
   ArrowLeft,
   Briefcase,
@@ -21,6 +23,7 @@ export const RoleDetailPage: React.FC<{
   onBack: () => void;
 }> = ({ roleId, onBack }) => {
   const { user, isOwner, isManager } = useAuth();
+  const { success, error } = useToast();
   const [role, setRole] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
@@ -40,8 +43,8 @@ export const RoleDetailPage: React.FC<{
     try {
       const data = await api.getRoleById(roleId);
       setRole(data);
-    } catch (err) {
-      console.error(err);
+    } catch (err: any) {
+      error('Failed to Load Role', err.message || 'Could not fetch role details.');
     } finally {
       setLoading(false);
     }
@@ -69,9 +72,10 @@ export const RoleDetailPage: React.FC<{
       await api.updateRoleStage(roleId, targetStage, stageNotes);
       setIsStageModalOpen(false);
       setStageNotes('');
+      success('Pipeline Stage Updated', `Candidate search transitioned to ${targetStage.replace(/_/g, ' ')}.`);
       fetchRole();
     } catch (err: any) {
-      alert(err.message || 'Failed to update stage');
+      error('Stage Update Failed', err.message || 'Failed to update pipeline stage.');
     } finally {
       setSubmitting(false);
     }
@@ -84,16 +88,34 @@ export const RoleDetailPage: React.FC<{
       await api.extendSla(roleId, parseInt(addedDays, 10), extensionReason);
       setIsExtensionModalOpen(false);
       setExtensionReason('');
+      success('SLA Clock Extended', `Granted +${addedDays} business days extension.`);
       fetchRole();
     } catch (err: any) {
-      alert(err.message || 'Failed to extend SLA');
+      error('Extension Failed', err.message || 'Failed to extend contractual SLA.');
     } finally {
       setSubmitting(false);
     }
   };
 
   if (loading) {
-    return <div className="p-8 text-center text-sm text-slate-400">Loading role SLA clock and pipeline history...</div>;
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center gap-4">
+          <div className="w-10 h-10 rounded-xl bg-slate-900 border border-slate-800 animate-pulse" />
+          <div className="space-y-2">
+            <div className="w-48 h-6 bg-slate-800 rounded animate-pulse" />
+            <div className="w-32 h-3 bg-slate-800/60 rounded animate-pulse" />
+          </div>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <CardSkeleton />
+          <CardSkeleton />
+          <CardSkeleton />
+          <CardSkeleton />
+        </div>
+        <TableSkeleton rows={4} cols={4} />
+      </div>
+    );
   }
 
   if (!role) {

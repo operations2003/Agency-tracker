@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { ToastProvider, useToast } from './context/ToastContext';
 import { SignInPage } from './pages/SignInPage';
 import { DashboardLayout } from './layouts/DashboardLayout';
 import { DashboardPage } from './pages/DashboardPage';
@@ -24,6 +25,7 @@ import { api } from './api/client';
 
 const AppContent: React.FC = () => {
   const { user, loading } = useAuth();
+  const { success, error } = useToast();
   const [currentTab, setCurrentTab] = useState<string>('dashboard');
   const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
   const [selectedRoleId, setSelectedRoleId] = useState<string | null>(null);
@@ -67,9 +69,9 @@ const AppContent: React.FC = () => {
       });
       setIsQuickTimeModalOpen(false);
       setQuickDescription('');
-      alert('Time entry submitted successfully!');
+      success('Time Logged Successfully', `${quickHours}h submitted for client.`);
     } catch (err: any) {
-      alert(err.message || 'Failed to submit time');
+      error('Time Submission Failed', err.message || 'Could not record time entry.');
     } finally {
       setQuickSubmitting(false);
     }
@@ -285,7 +287,9 @@ const AppContent: React.FC = () => {
 export default function App() {
   return (
     <AuthProvider>
-      <AppContent />
+      <ToastProvider>
+        <AppContent />
+      </ToastProvider>
     </AuthProvider>
   );
 }

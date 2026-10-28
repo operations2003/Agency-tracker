@@ -1,10 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../api/client';
+import { useToast } from '../context/ToastContext';
 import { RecruiterWorkload } from '../types';
 import { Modal } from '../components/Modal';
+import { CardSkeleton } from '../components/LoadingSkeleton';
+import { EmptyState } from '../components/EmptyState';
 import { Users, AlertTriangle, ArrowRight, CheckCircle2, RefreshCw } from 'lucide-react';
 
 export const WorkloadBoardPage: React.FC = () => {
+  const { success, error } = useToast();
   const [workloads, setWorkloads] = useState<RecruiterWorkload[]>([]);
   const [loading, setLoading] = useState(true);
   const [thresholds, setThresholds] = useState({ maxOpenRoles: 8, maxWeeklyHours: 45 });
@@ -22,8 +26,8 @@ export const WorkloadBoardPage: React.FC = () => {
       const data = await api.getWorkloadOverview();
       setWorkloads(data.recruiters);
       if (data.thresholds) setThresholds(data.thresholds);
-    } catch (err) {
-      console.error(err);
+    } catch (err: any) {
+      error('Failed to Load Workload', err.message || 'Could not fetch recruiter capacities.');
     } finally {
       setLoading(false);
     }
@@ -42,9 +46,10 @@ export const WorkloadBoardPage: React.FC = () => {
       setIsReassignModalOpen(false);
       setSelectedRole(null);
       setReassignReason('');
+      success('Role Reassigned Successfully', `Role search transferred to new recruiter.`);
       fetchWorkload();
     } catch (err: any) {
-      alert(err.message || 'Failed to reassign role');
+      error('Reassignment Failed', err.message || 'Failed to reassign role');
     } finally {
       setSubmitting(false);
     }
@@ -68,7 +73,17 @@ export const WorkloadBoardPage: React.FC = () => {
 
       {/* Recruiter Workload Cards Grid */}
       {loading ? (
-        <div className="p-8 text-center text-sm text-slate-400">Loading recruiter capacity metrics...</div>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <CardSkeleton />
+          <CardSkeleton />
+          <CardSkeleton />
+          <CardSkeleton />
+        </div>
+      ) : workloads.length === 0 ? (
+        <EmptyState
+          title="No recruiter workload data"
+          description="No active recruiters found in the agency roster."
+        />
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {workloads.map(r => (

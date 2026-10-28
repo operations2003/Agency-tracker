@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { useToast } from '../context/ToastContext';
 import { api } from '../api/client';
 import { Modal } from '../components/Modal';
 import { SlaBadge } from '../components/Badge';
+import { CardSkeleton, TableSkeleton } from '../components/LoadingSkeleton';
 import {
   ArrowLeft,
   Building2,
@@ -21,6 +23,7 @@ export const ClientDetailPage: React.FC<{
   onSelectRole: (roleId: string) => void;
 }> = ({ clientId, onBack, onSelectRole }) => {
   const { isOwner, isFinance } = useAuth();
+  const { success, error } = useToast();
   const [client, setClient] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [isNewTermModalOpen, setIsNewTermModalOpen] = useState(false);
@@ -42,8 +45,8 @@ export const ClientDetailPage: React.FC<{
         setBillingModel(data.contractTerms[0].billingModel);
         setBillingRate(String(data.contractTerms[0].billingRate));
       }
-    } catch (err) {
-      console.error(err);
+    } catch (err: any) {
+      error('Failed to Load Client', err.message || 'Could not fetch client contract details.');
     } finally {
       setLoading(false);
     }
@@ -65,16 +68,33 @@ export const ClientDetailPage: React.FC<{
         notes: termNotes
       });
       setIsNewTermModalOpen(false);
+      success('Contract Term Updated', `Applied ${billingModel} rate of $${billingRate}.`);
       fetchClient();
     } catch (err: any) {
-      alert(err.message || 'Failed to add contract term');
+      error('Failed to Add Contract Term', err.message || 'Could not save contract term override.');
     } finally {
       setSubmitting(false);
     }
   };
 
   if (loading) {
-    return <div className="p-8 text-center text-sm text-slate-400">Loading client profile...</div>;
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center gap-4">
+          <div className="w-10 h-10 rounded-xl bg-slate-900 border border-slate-800 animate-pulse" />
+          <div className="space-y-2">
+            <div className="w-48 h-6 bg-slate-800 rounded animate-pulse" />
+            <div className="w-32 h-3 bg-slate-800/60 rounded animate-pulse" />
+          </div>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <CardSkeleton />
+          <CardSkeleton />
+          <CardSkeleton />
+        </div>
+        <TableSkeleton rows={4} cols={5} />
+      </div>
+    );
   }
 
   if (!client) {

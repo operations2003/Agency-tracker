@@ -1,8 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { useToast } from '../context/ToastContext';
 import { api } from '../api/client';
 import { TimeEntry, Client } from '../types';
 import { Modal } from '../components/Modal';
+import { TableSkeleton } from '../components/LoadingSkeleton';
+import { EmptyState } from '../components/EmptyState';
+import { Pagination } from '../components/Pagination';
 import {
   Clock,
   Plus,
@@ -15,11 +19,14 @@ import {
 
 export const TimeEntryPage: React.FC<{ isOpenModalImmediately?: boolean }> = ({ isOpenModalImmediately = false }) => {
   const { user } = useAuth();
+  const { success, error } = useToast();
   const [entries, setEntries] = useState<TimeEntry[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [roles, setRoles] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(isOpenModalImmediately);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
 
   // Form State
   const [clientId, setClientId] = useState('');
@@ -36,8 +43,8 @@ export const TimeEntryPage: React.FC<{ isOpenModalImmediately?: boolean }> = ({ 
     try {
       const data = await api.getTimeEntries();
       setEntries(data);
-    } catch (err) {
-      console.error(err);
+    } catch (err: any) {
+      error('Failed to Load Entries', err.message || 'Could not fetch time logs.');
     } finally {
       setLoading(false);
     }
@@ -77,9 +84,10 @@ export const TimeEntryPage: React.FC<{ isOpenModalImmediately?: boolean }> = ({ 
       });
       setIsModalOpen(false);
       setDescription('');
+      success('Hours Logged Successfully', `${hours}h submitted for manager approval.`);
       fetchEntries();
     } catch (err: any) {
-      alert(err.message || 'Failed to record time entry');
+      error('Failed to Record Hours', err.message || 'Validation error saving time entry.');
     } finally {
       setSubmitting(false);
     }
@@ -139,12 +147,17 @@ export const TimeEntryPage: React.FC<{ isOpenModalImmediately?: boolean }> = ({ 
       </div>
 
       {/* Entries Table */}
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-sm">
-        {loading ? (
-          <div className="p-8 text-center text-sm text-slate-400">Loading logged time entries...</div>
-        ) : entries.length === 0 ? (
-          <div className="p-8 text-center text-sm text-slate-400">No time entries recorded yet.</div>
-        ) : (
+      {loading ? (
+        <TableSkeleton rows={5} cols={7} />
+      ) : entries.length === 0 ? (
+        <EmptyState
+          title="No logged hours found"
+          description="You haven't recorded any work hours for this period yet. Log your daily sourcing and interview activities."
+          actionLabel="Log Work Hours"
+          onAction={() => setIsModalOpen(true)}
+        />
+      ) : (
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-sm">
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
               <thead className="bg-slate-800/60 text-xs uppercase tracking-wider text-slate-400 border-b border-slate-800">
@@ -159,7 +172,7 @@ export const TimeEntryPage: React.FC<{ isOpenModalImmediately?: boolean }> = ({ 
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/60">
-                {entries.map(entry => (
+                {entries.slice((currentPage - 1) * pageSize, currentPage * pageSize).map(entry => (
                   <tr key={entry.id} className="hover:bg-slate-800/40 transition">
                     <td className="py-3.5 px-4 font-mono text-xs text-slate-300">
                       {new Date(entry.workDate).toISOString().slice(0, 10)}
@@ -200,8 +213,15 @@ export const TimeEntryPage: React.FC<{ isOpenModalImmediately?: boolean }> = ({ 
               </tbody>
             </table>
           </div>
-        )}
-      </div>
+          <Pagination
+            currentPage={currentPage}
+            totalItems={entries.length}
+            pageSize={pageSize}
+            onPageChange={setCurrentPage}
+            onPageSizeChange={setPageSize}
+          />
+        </div>
+      )}
 
       {/* Log Time Modal */}
       <Modal
