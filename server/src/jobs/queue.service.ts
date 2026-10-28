@@ -33,15 +33,17 @@ export class QueueService {
    */
   static async claimNext(workerId: string, leaseDurationMs: number = 300000) {
     const now = new Date();
+    // Allow up to 10 seconds clock skew tolerance between cloud DB and application server
+    const clockSkewToleranceNow = new Date(Date.now() + 10000);
     const staleThreshold = new Date(Date.now() - leaseDurationMs);
 
-    // Find first candidate: either PENDING with runAt <= now, or PROCESSING with stale lock
+    // Find first candidate: either PENDING with runAt <= now + tolerance, or PROCESSING with stale lock
     const candidate = await prisma.backgroundJob.findFirst({
       where: {
         OR: [
           {
             status: 'PENDING',
-            runAt: { lte: now },
+            runAt: { lte: clockSkewToleranceNow },
           },
           {
             status: 'PROCESSING',
@@ -78,6 +80,7 @@ export class QueueService {
 
     return prisma.backgroundJob.findUnique({ where: { id: candidate.id } });
   }
+
 
   /**
    * Mark job as completed
