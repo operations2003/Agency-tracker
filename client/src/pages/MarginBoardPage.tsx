@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { api } from '../api/client';
 import { MarginResult } from '../types';
 import { MarginBadge, Badge } from '../components/Badge';
@@ -12,25 +12,65 @@ import {
   Info,
   Calendar,
   CheckCircle2,
-  DollarSign
+  DollarSign,
+  Search,
+  RefreshCw,
+  FileSpreadsheet
 } from 'lucide-react';
 
 export const MarginBoardPage: React.FC = () => {
   const [margins, setMargins] = useState<MarginResult[]>([]);
   const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
   const [sortBy, setSortBy] = useState<'margin' | 'revenue' | 'profit' | 'cost'>('margin');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [billingModelFilter, setBillingModelFilter] = useState('');
+
+  // Reporting Period State
+  const [period, setPeriod] = useState<string>('current_month');
+  const [customStartDate, setCustomStartDate] = useState<string>('');
+  const [customEndDate, setCustomEndDate] = useState<string>('');
 
   // Drilldown modal
   const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
   const [drilldownData, setDrilldownData] = useState<any>(null);
   const [drilldownLoading, setDrilldownLoading] = useState(false);
 
+  // Compute actual date range
+  const dateRange = useMemo(() => {
+    const now = new Date();
+    let start: Date;
+    let end: Date = now;
+
+    if (period === 'current_month') {
+      start = new Date(now.getFullYear(), now.getMonth(), 1);
+    } else if (period === 'last_month') {
+      start = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      end = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59);
+    } else if (period === 'quarter') {
+      const qStartMonth = Math.floor(now.getMonth() / 3) * 3;
+      start = new Date(now.getFullYear(), qStartMonth, 1);
+    } else if (period === 'year') {
+      start = new Date(now.getFullYear(), 0, 1);
+    } else if (period === 'custom' && customStartDate && customEndDate) {
+      start = new Date(customStartDate);
+      end = new Date(customEndDate);
+    } else {
+      start = new Date(now.getFullYear(), now.getMonth(), 1);
+    }
+
+    return {
+      startDate: start.toISOString().slice(0, 10),
+      endDate: end.toISOString().slice(0, 10)
+    };
+  }, [period, customStartDate, customEndDate]);
+
   const fetchMargins = async () => {
     setLoading(true);
     try {
       const data = await api.getClientMargins({
+        startDate: dateRange.startDate,
+        endDate: dateRange.endDate,
         sortBy,
         order: sortOrder
       });
@@ -44,13 +84,16 @@ export const MarginBoardPage: React.FC = () => {
 
   useEffect(() => {
     fetchMargins();
-  }, [sortBy, sortOrder]);
+  }, [dateRange, sortBy, sortOrder]);
 
   const handleOpenDrilldown = async (clientId: string) => {
     setSelectedClientId(clientId);
     setDrilldownLoading(true);
     try {
-      const data = await api.getClientDrilldown(clientId);
+      const data = await api.getClientDrilldown(clientId, {
+        startDate: dateRange.startDate,
+        endDate: dateRange.endDate
+      });
       setDrilldownData(data);
     } catch (err) {
       console.error(err);
@@ -59,12 +102,29 @@ export const MarginBoardPage: React.FC = () => {
     }
   };
 
-  const filteredMargins = margins.filter(m => !billingModelFilter || m.billingModel === billingModelFilter);
+  const handleExportCsv = () => {
+    window.open('/api/v1/csv/export/clients', '_blank');
+  };
+
+  const filteredMargins = margins.filter(m => {
+    const matchBilling = !billingModelFilter || m.billingModel === billingModelFilter;
+    const matchSearch = !search ||
+      m.clientName.toLowerCase().includes(search.toLowerCase()) ||
+      m.clientCode.toLowerCase().includes(search.toLowerCase());
+    return matchBilling && matchSearch;
+  });
+
+  // Calculate board aggregates
+  const totalRevenue = filteredMargins.reduce((acc, m) => acc + m.totalRevenue, 0);
+  const totalCost = filteredMargins.reduce((acc, m) => acc + m.directCost, 0);
+  const totalProfit = filteredMargins.reduce((acc, m) => acc + m.profit, 0);
+  const overallMargin = totalRevenue > 0 ? ((totalProfit / totalRevenue) * 100).toFixed(1) : 'N/A';
+  const belowThresholdCount = filteredMargins.filter(m => m.isBelowThreshold).length;
 
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+      <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
         <div>
           <h2 className="text-xl font-bold text-white tracking-tight">Client Margin Board</h2>
           <p className="text-xs text-slate-400 mt-1">
@@ -72,11 +132,45 @@ export const MarginBoardPage: React.FC = () => {
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2.5">
+          {/* Period Selector */}
+          <div className="flex items-center bg-slate-900 border border-slate-800 rounded-xl px-2.5 py-1.5 text-xs text-slate-300">
+            <Calendar className="w-3.5 h-3.5 text-slate-400 mr-2" />
+            <select
+              value={period}
+              onChange={e => setPeriod(e.target.value)}
+              className="bg-transparent text-xs text-white focus:outline-none cursor-pointer"
+            >
+              <option value="current_month" className="bg-slate-900">Current Month</option>
+              <option value="last_month" className="bg-slate-900">Last Month</option>
+              <option value="quarter" className="bg-slate-900">Quarter to Date</option>
+              <option value="year" className="bg-slate-900">Year to Date</option>
+              <option value="custom" className="bg-slate-900">Custom Date Range</option>
+            </select>
+          </div>
+
+          {period === 'custom' && (
+            <div className="flex items-center gap-1.5 text-xs">
+              <input
+                type="date"
+                value={customStartDate}
+                onChange={e => setCustomStartDate(e.target.value)}
+                className="px-2.5 py-1.5 bg-slate-900 border border-slate-800 rounded-xl text-xs text-white font-mono focus:outline-none focus:border-sky-500"
+              />
+              <span className="text-slate-500">to</span>
+              <input
+                type="date"
+                value={customEndDate}
+                onChange={e => setCustomEndDate(e.target.value)}
+                className="px-2.5 py-1.5 bg-slate-900 border border-slate-800 rounded-xl text-xs text-white font-mono focus:outline-none focus:border-sky-500"
+              />
+            </div>
+          )}
+
           <select
             value={billingModelFilter}
             onChange={e => setBillingModelFilter(e.target.value)}
-            className="px-3.5 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-300 focus:outline-none focus:border-sky-500"
+            className="px-3 py-1.5 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-300 focus:outline-none focus:border-sky-500"
           >
             <option value="">All Billing Models</option>
             <option value="RETAINER">Retainer</option>
@@ -91,7 +185,7 @@ export const MarginBoardPage: React.FC = () => {
               setSortBy(sb as any);
               setSortOrder(so as any);
             }}
-            className="px-3.5 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-300 focus:outline-none focus:border-sky-500"
+            className="px-3 py-1.5 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-300 focus:outline-none focus:border-sky-500"
           >
             <option value="margin-asc">Lowest Margin (Risk First)</option>
             <option value="margin-desc">Highest Margin</option>
@@ -100,7 +194,56 @@ export const MarginBoardPage: React.FC = () => {
             <option value="revenue-desc">Highest Revenue</option>
             <option value="cost-desc">Highest Direct Cost</option>
           </select>
+
+          <button
+            onClick={handleExportCsv}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-xl text-xs text-slate-300 hover:text-white transition"
+            title="Export CSV"
+          >
+            <Download className="w-3.5 h-3.5" />
+            <span>Export CSV</span>
+          </button>
         </div>
+      </div>
+
+      {/* Summary KPI Strip */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="p-3.5 rounded-xl bg-slate-900 border border-slate-800">
+          <span className="text-[10px] uppercase font-semibold text-slate-400">Total Recognized Revenue</span>
+          <div className="text-lg font-bold font-mono text-white mt-0.5">${totalRevenue.toLocaleString()}</div>
+        </div>
+        <div className="p-3.5 rounded-xl bg-slate-900 border border-slate-800">
+          <span className="text-[10px] uppercase font-semibold text-slate-400">Direct Labor Allocated</span>
+          <div className="text-lg font-bold font-mono text-slate-300 mt-0.5">${totalCost.toLocaleString()}</div>
+        </div>
+        <div className="p-3.5 rounded-xl bg-slate-900 border border-slate-800">
+          <span className="text-[10px] uppercase font-semibold text-slate-400">Total Gross Profit</span>
+          <div className="text-lg font-bold font-mono text-emerald-400 mt-0.5">${totalProfit.toLocaleString()}</div>
+        </div>
+        <div className="p-3.5 rounded-xl bg-slate-900 border border-slate-800">
+          <span className="text-[10px] uppercase font-semibold text-slate-400">Overall Margin / Safety</span>
+          <div className="text-lg font-bold font-mono text-white mt-0.5 flex items-center justify-between">
+            <span>{overallMargin}%</span>
+            {belowThresholdCount > 0 && (
+              <span className="text-[11px] font-sans font-medium text-amber-400 flex items-center gap-1">
+                <AlertTriangle className="w-3.5 h-3.5" />
+                <span>{belowThresholdCount} at risk</span>
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Search Input Bar */}
+      <div className="relative">
+        <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
+        <input
+          type="text"
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          placeholder="Search by client name or code..."
+          className="w-full pl-10 pr-4 py-2 bg-slate-900 border border-slate-800 rounded-xl text-sm text-white focus:outline-none focus:border-sky-500"
+        />
       </div>
 
       {/* Margins Table */}
@@ -108,7 +251,7 @@ export const MarginBoardPage: React.FC = () => {
         {loading ? (
           <div className="p-8 text-center text-sm text-slate-400">Calculating real-time client margins...</div>
         ) : filteredMargins.length === 0 ? (
-          <div className="p-8 text-center text-sm text-slate-400">No client records found.</div>
+          <div className="p-8 text-center text-sm text-slate-400">No client records found matching criteria.</div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
@@ -205,7 +348,7 @@ export const MarginBoardPage: React.FC = () => {
           setDrilldownData(null);
         }}
         title={`Margin Breakdown: ${drilldownData?.summary?.clientName || 'Loading...'}`}
-        subtitle="Source time allocations, labor rates, and revenue reconciliation"
+        subtitle={`Period: ${dateRange.startDate} to ${dateRange.endDate} • Detailed source labor allocation`}
         maxWidth="xl"
       >
         {drilldownLoading ? (
@@ -240,7 +383,7 @@ export const MarginBoardPage: React.FC = () => {
                     : 'N/A (Zero Rev)'}
                 </div>
                 <span className={`text-[10px] font-mono ${drilldownData.summary.isBelowThreshold ? 'text-amber-400' : 'text-emerald-400'}`}>
-                  {drilldownData.summary.isBelowThreshold ? 'Below Threshold' : 'Healthy Margin'}
+                  {drilldownData.summary.isBelowThreshold ? 'Below Safety Threshold' : 'Healthy Margin'}
                 </span>
               </div>
             </div>
@@ -251,20 +394,26 @@ export const MarginBoardPage: React.FC = () => {
                 Underlying Labor Records ({drilldownData.timeEntries?.length || 0})
               </h4>
               <div className="max-h-60 overflow-y-auto rounded-xl border border-slate-800 divide-y divide-slate-800">
-                {drilldownData.timeEntries?.map((entry: any) => (
-                  <div key={entry.id} className="p-2.5 flex items-center justify-between text-xs hover:bg-slate-800/40">
-                    <div>
-                      <div className="font-semibold text-white">{entry.recruiter?.name}</div>
-                      <div className="text-[11px] text-slate-400">
-                        {entry.taskType} • {new Date(entry.workDate).toISOString().slice(0, 10)}
+                {drilldownData.timeEntries?.length === 0 ? (
+                  <div className="p-4 text-center text-xs text-slate-500">No time entries in this period.</div>
+                ) : (
+                  drilldownData.timeEntries?.map((entry: any) => (
+                    <div key={entry.id} className="p-2.5 flex items-center justify-between text-xs hover:bg-slate-800/40">
+                      <div>
+                        <div className="font-semibold text-white">{entry.recruiter?.name}</div>
+                        <div className="text-[11px] text-slate-400">
+                          {entry.taskType} • {new Date(entry.workDate).toISOString().slice(0, 10)}
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <span className="font-mono font-bold text-white">{entry.hours}h</span>
+                        <span className={`block text-[10px] font-mono ${entry.status === 'APPROVED' ? 'text-emerald-400' : 'text-amber-400'}`}>
+                          {entry.status}
+                        </span>
                       </div>
                     </div>
-                    <div className="text-right">
-                      <span className="font-mono font-bold text-white">{entry.hours}h</span>
-                      <span className="block text-[10px] text-slate-400">{entry.status}</span>
-                    </div>
-                  </div>
-                ))}
+                  ))
+                )}
               </div>
             </div>
           </div>
@@ -273,4 +422,3 @@ export const MarginBoardPage: React.FC = () => {
     </div>
   );
 };
-

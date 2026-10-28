@@ -216,11 +216,20 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
       <main className="flex-1 min-w-0 overflow-y-auto">
         <header className="hidden md:flex items-center justify-between px-8 py-4 border-b border-slate-800/80 bg-slate-900/40 backdrop-blur-md sticky top-0 z-30">
           <div className="flex items-center gap-3">
-            <h2 className="text-lg font-semibold text-white capitalize">
-              {navItems.find(i => i.id === currentTab)?.label || 'Dashboard'}
-            </h2>
-            <span className="text-xs px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-mono">
-              Live Monitoring
+            <div className="flex items-center gap-1.5 text-xs text-slate-400">
+              <button onClick={() => setCurrentTab('dashboard')} className="hover:text-sky-400 transition font-medium">
+                Agency Tracker
+              </button>
+              <span>/</span>
+              <span className="text-white font-semibold">
+                {navItems.find(i => i.id === currentTab)?.label || 'Overview Dashboard'}
+              </span>
+            </div>
+            <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-mono">
+              Live Operational Data
+            </span>
+            <span className="text-[10px] px-2 py-0.5 rounded-full bg-sky-500/10 text-sky-400 border border-sky-500/20 font-mono">
+              Demo Environment
             </span>
           </div>
 

@@ -55,10 +55,22 @@ export class BillingController {
       include: { lineItems: true, client: true }
     });
 
+    await prisma.auditLog.create({
+      data: {
+        organizationId: user.organizationId,
+        userId: user.id,
+        action: 'INVOICE_CREATED',
+        entityType: 'INVOICE',
+        entityId: invoice.id,
+        details: JSON.stringify({ invoiceNumber: invoice.invoiceNumber, amount: invoice.amount, clientId: invoice.clientId })
+      }
+    });
+
     return res.status(201).json(invoice);
   }
 
   public async recordBillableHire(req: AuthenticatedRequest, res: Response) {
+    const user = req.user!;
     const { clientId, roleId, candidateName, hireDate, feeAmount, currency } = req.body;
 
     if (!clientId || !roleId || !candidateName || !feeAmount) {
@@ -75,6 +87,17 @@ export class BillingController {
         currency: currency || 'USD'
       },
       include: { client: true, role: true }
+    });
+
+    await prisma.auditLog.create({
+      data: {
+        organizationId: user.organizationId,
+        userId: user.id,
+        action: 'BILLABLE_HIRE_RECORDED',
+        entityType: 'BILLABLE_HIRE',
+        entityId: hire.id,
+        details: JSON.stringify({ candidateName: hire.candidateName, feeAmount: hire.feeAmount, roleId: hire.roleId, clientId: hire.clientId })
+      }
     });
 
     return res.status(201).json(hire);
@@ -97,6 +120,17 @@ export class BillingController {
         approvedBy: user.name
       },
       include: { client: true }
+    });
+
+    await prisma.auditLog.create({
+      data: {
+        organizationId: user.organizationId,
+        userId: user.id,
+        action: 'FINANCIAL_ADJUSTMENT_RECORDED',
+        entityType: 'FINANCIAL_ADJUSTMENT',
+        entityId: adjustment.id,
+        details: JSON.stringify({ amount: adjustment.amount, reason: adjustment.reason, clientId: adjustment.clientId })
+      }
     });
 
     return res.status(201).json(adjustment);

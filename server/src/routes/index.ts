@@ -15,8 +15,33 @@ import { csvController } from '../controllers/csv.controller';
 import { reportController } from '../controllers/report.controller';
 import { settingsController } from '../controllers/settings.controller';
 import { auditController } from '../controllers/audit.controller';
+import { openApiSpec } from '../docs/openapi';
 
 const router = Router();
+
+// Public Documentation
+router.get('/docs/openapi.json', (req, res) => res.json(openApiSpec));
+router.get('/docs', (req, res) => {
+  res.setHeader('Content-Type', 'text/html');
+  res.send(`<!DOCTYPE html>
+<html>
+<head>
+  <title>Agency Tracker API - OpenAPI Documentation</title>
+  <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5/swagger-ui.css" />
+</head>
+<body style="margin: 0; background: #0f172a;">
+  <div id="swagger-ui"></div>
+  <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
+  <script>
+    SwaggerUIBundle({
+      url: '/api/v1/docs/openapi.json',
+      dom_id: '#swagger-ui',
+      deepLinking: true
+    });
+  </script>
+</body>
+</html>`);
+});
 
 // Public auth routes
 router.post('/auth/login', (req, res, next) => authController.login(req, res).catch(next));
