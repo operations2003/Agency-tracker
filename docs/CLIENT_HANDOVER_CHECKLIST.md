@@ -121,3 +121,4 @@ The application uses a database-backed durable queue (`BackgroundJob` model) to 
 - [x] **Audit Trail**: Full audit logging in `AuditLog` table for rate revisions, SLA modifications, and manual overrides.
 - [x] **Role-Based Access Control**: Strict tenant scoping and RBAC (`AGENCY_OWNER`, `ACCOUNT_MANAGER`, `RECRUITER`).
 - [x] **Observability**: Health checks at `/health` and readiness checks at `/ready`.
+
